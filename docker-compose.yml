@@ -1,0 +1,51 @@
+version: '3.9'
+
+services:
+
+  db:
+    image: mysql:8.0
+    container_name: tickethub-db
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpass
+      MYSQL_DATABASE: tickethub
+      MYSQL_USER: admin
+      MYSQL_PASSWORD: admin123
+    ports:
+      - "3306:3306"
+    volumes:
+      - db_data:/var/lib/mysql
+      - ./infra/schema.sql:/docker-entrypoint-initdb.d/schema.sql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build: ./backend
+    container_name: tickethub-api
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DB_HOST: db
+      DB_PORT: 3306
+      DB_USER: admin
+      DB_PASS: admin123
+      DB_NAME: tickethub
+      PORT: 3000
+    ports:
+      - "3000:3000"
+
+  frontend:
+    build: ./frontend
+    container_name: tickethub-frontend
+    depends_on:
+      - backend
+    environment:
+      PORT: 8080
+    ports:
+      - "8080:8080"
+
+volumes:
+  db_data:
