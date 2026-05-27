@@ -5,9 +5,10 @@
 
 **Grupo:**
 
-1. RA - Nome - Back-end (API REST, Dockerfile, schema SQL)
-2. RA - Nome - Front-end (HTML/CSS/JS, Dockerfile)
-3. RA - Nome - Infra AWS (VPC, RDS, ECS, API Gateway, Lambda)
+1. 10438316 - Kauan Rodrigues - Back-end (API REST, Dockerfile, schema SQL)
+2. 10439810 - Luana Santos - Back-end (API REST, Dockerfile, schema SQL)
+3. 10437382 - Marcelo Takao - Front-end (HTML/CSS/JS, Dockerfile)
+4. 10431850 - Rafael Trindade - Infra AWS (VPC, RDS, ECS, API Gateway, Lambda)
 
 ---
 
