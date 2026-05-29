@@ -150,7 +150,391 @@
     // ──────────────────────────────────────────────
     // CONFIG — troca pela URL do seu API Gateway
     // ──────────────────────────────────────────────
-    const API_BASE = window.API_GATEWAY_URL || 'http://localhost:3000';
+    const API_BASE = 'https://xajfi87ghj.execute-api.us-east-1.amazonaws.com/prod';
+
+    // ── Navegação ──────────────────────────────────
+    function showPage(name) {
+      document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+      document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
+      document.getElementById('page-' + name).classList.add('active');
+      document.getElementById('link-' + name).classList.add('active');
+      if (name === 'home')  loadEvents();
+      if (name === 'admin') loadAdminTable();
+    }
+
+    // ── Utilitários ───────────────────────────────
+    function toast(msg, type = 'success') {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.className = `toast ${type}`;
+      setTimeout(() => t.classList.add('hidden'), 3000);
+    }
+
+    function formatDate(dt) {
+      return new Date(dt).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
+    }
+
+    function formatPrice(p) {
+      return Number(p).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    }
+
+    const categoryLabel = {
+      show: '🎤 Show', sports: '⚽ Esporte',
+      festival: '🎪 Festival', theater: '🎭 Teatro', other: '🎟 Outro'
+    };
+
+    // ── Eventos (Home) ────────────────────────────
+    let allEvents = [];
+
+    async function loadEvents() {
+      const grid = document.getElementById('events-grid');
+      grid.innerHTML = '<div class="loading-state">Carregando eventos...</div>';
+      try {
+        const res = await fetch(`${API_BASE}/events`);
+        allEvents = await res.json();
+        populateCityFilter();
+        renderCards(allEvents);
+      } catch {
+        grid.innerHTML = '<div class="loading-state error">Não foi possível carregar os eventos.</div>';
+      }
+    }
+
+    function populateCityFilter() {
+      const sel = document.getElementById('filter-city');
+      const cities = [...new Set(allEvents.map(e => e.city))].sort();
+      sel.innerHTML = '<option value="">Todas as cidades</option>' +
+        cities.map(c => `<option value="${c}">${c}</option>`).join('');
+    }
+
+    function filterEvents() {
+      const cat  = document.getElementById('filter-category').value;
+      const city = document.getElementById('filter-city').value;
+      const filtered = allEvents.filter(e =>
+        (!cat  || e.category === cat) &&
+        (!city || e.city === city)
+      );
+      renderCards(filtered);
+    }
+
+    function renderCards(events) {
+      const grid = document.getElementById('events-grid');
+      if (events.length === 0) {
+        grid.innerHTML = '<div class="loading-state">Nenhum evento encontrado.</div>';
+        return;
+      }
+      grid.innerHTML = events.map(ev => `
+        <article class="event-card">
+          <div class="card-cat">${categoryLabel[ev.category] || ev.category}</div>
+          <h3 class="card-name">${ev.name}</h3>
+          <p class="card-venue">📍 ${ev.venue}, ${ev.city}</p>
+          <p class="card-date">🗓 ${formatDate(ev.event_date)}</p>
+          <div class="card-footer">
+            <span class="card-price">${formatPrice(ev.price)}</span>
+            <span class="card-tickets">${ev.available_tickets} ingressos</span>
+          </div>
+        </article>
+      `).join('');
+    }
+
+    // ── Relatório ─────────────────────────────────
+    async function loadReport() {
+      const box = document.getElementById('report-content');
+      box.innerHTML = '<div class="loading-state">Gerando relatório via Lambda...</div>';
+      try {
+        const res  = await fetch(`${API_BASE}/report`);
+        const data = await res.json();
+
+        box.innerHTML = `
+          <div class="report-grid">
+            <div class="stat-card"><div class="stat-value">${data.summary.total_events}</div><div class="stat-label">Total de Eventos</div></div>
+            <div class="stat-card"><div class="stat-value">${formatPrice(data.summary.average_price_brl)}</div><div class="stat-label">Preço Médio</div></div>
+            <div class="stat-card"><div class="stat-value">${data.summary.total_tickets.toLocaleString('pt-BR')}</div><div class="stat-label">Total de Ingressos</div></div>
+            <div class="stat-card accent"><div class="stat-value">${data.summary.occupancy_rate_pct}%</div><div class="stat-label">Taxa de Ocupação</div></div>
+          </div>
+
+          <div class="report-row">
+            <div class="report-block">
+              <h4>Por Categoria</h4>
+              ${Object.entries(data.by_category).map(([k,v]) =>
+                `<div class="bar-row"><span>${categoryLabel[k]||k}</span><div class="bar-track"><div class="bar-fill" style="width:${(v/data.summary.total_events*100).toFixed(0)}%"></div></div><span>${v}</span></div>`
+              ).join('')}
+            </div>
+            <div class="report-block">
+              <h4>Por Cidade</h4>
+              ${Object.entries(data.by_city).map(([k,v]) =>
+                `<div class="bar-row"><span>${k}</span><div class="bar-track"><div class="bar-fill" style="width:${(v/data.summary.total_events*100).toFixed(0)}%"></div></div><span>${v}</span></div>`
+              ).join('')}
+            </div>
+          </div>
+
+          ${data.upcoming_events.length ? `
+          <div class="report-block">
+            <h4>Próximos Eventos</h4>
+            ${data.upcoming_events.map(e =>
+              `<div class="upcoming-row"><strong>${e.name}</strong> — ${e.city} <span>${formatDate(e.event_date)}</span></div>`
+            ).join('')}
+          </div>` : ''}
+
+          <p class="report-meta">Gerado em: ${new Date(data.generated_at).toLocaleString('pt-BR')}</p>
+        `;
+      } catch (err) {
+        box.innerHTML = `<div class="loading-state error">Erro ao carregar relatório: ${err.message}</div>`;
+      }
+    }
+
+    // ── Admin CRUD ────────────────────────────────
+    async function loadAdminTable() {
+      const wrapper = document.getElementById('admin-table-wrapper');
+      wrapper.innerHTML = '<div class="loading-state">Carregando...</div>';
+      try {
+        const res = await fetch(`${API_BASE}/events`);
+        const events = await res.json();
+        if (events.length === 0) {
+          wrapper.innerHTML = '<div class="loading-state">Nenhum evento cadastrado.</div>';
+          return;
+        }
+        wrapper.innerHTML = `
+          <div class="table-wrapper">
+          <table class="data-table">
+            <thead><tr>
+              <th>ID</th><th>Nome</th><th>Cidade</th><th>Data</th><th>Preço</th><th>Ingressos</th><th>Ações</th>
+            </tr></thead>
+            <tbody>
+              ${events.map(ev => `
+                <tr>
+                  <td>${ev.id}</td>
+                  <td><strong>${ev.name}</strong></td>
+                  <td>${ev.city}</td>
+                  <td>${formatDate(ev.event_date)}</td>
+                  <td>${formatPrice(ev.price)}</td>
+                  <td>${ev.available_tickets}</td>
+                  <td class="actions">
+                    <button class="btn-edit" onclick='openEditModal(${JSON.stringify(ev)})'>Editar</button>
+                    <button class="btn-delete" onclick="deleteEvent(${ev.id}, '${ev.name.replace(/'/g,"\\'")}')">Excluir</button>
+                  </td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+          </div>
+        `;
+      } catch {
+        wrapper.innerHTML = '<div class="loading-state error">Erro ao carregar eventos.</div>';
+      }
+    }
+
+    // ── Modal ─────────────────────────────────────
+    function openModal() {
+      document.getElementById('modal-title').textContent = 'Novo Evento';
+      document.getElementById('form-id').value = '';
+      ['name','description','venue','city','price'].forEach(f => document.getElementById('form-'+f).value = '');
+      document.getElementById('form-tickets').value = '';
+      document.getElementById('form-date').value = '';
+      document.getElementById('form-category').value = 'show';
+      document.getElementById('modal-overlay').classList.remove('hidden');
+    }
+
+    function openEditModal(ev) {
+      document.getElementById('modal-title').textContent = 'Editar Evento';
+      document.getElementById('form-id').value          = ev.id;
+      document.getElementById('form-name').value        = ev.name;
+      document.getElementById('form-description').value = ev.description || '';
+      document.getElementById('form-venue').value       = ev.venue;
+      document.getElementById('form-city').value        = ev.city;
+      document.getElementById('form-category').value    = ev.category;
+      document.getElementById('form-tickets').value     = ev.total_tickets;
+      document.getElementById('form-price').value       = ev.price;
+      // format datetime-local
+      const d = new Date(ev.event_date);
+      document.getElementById('form-date').value = d.toISOString().slice(0,16);
+      document.getElementById('modal-overlay').classList.remove('hidden');
+    }
+
+    function closeModal(e) {
+      if (!e || e.target === document.getElementById('modal-overlay')) {
+        document.getElementById('modal-overlay').classList.add('hidden');
+      }
+    }
+
+    async function saveEvent() {
+      const id = document.getElementById('form-id').value;
+      const body = {
+        name:          document.getElementById('form-name').value.trim(),
+        description:   document.getElementById('form-description').value.trim(),
+        venue:         document.getElementById('form-venue').value.trim(),
+        city:          document.getElementById('form-city').value.trim(),
+        event_date:    document.getElementById('form-date').value,
+        category:      document.getElementById('form-category').value,
+        total_tickets: parseInt(document.getElementById('form-tickets').value),
+        price:         parseFloat(document.getElementById('form-price').value),
+      };
+
+      if (!body.name || !body.venue || !body.city || !body.event_date || !body.total_tickets || !body.price) {
+        toast('Preencha todos os campos obrigatórios.', 'error'); return;
+      }
+
+      const isEdit = !!id;
+      const url    = isEdit ? `${API_BASE}/events/${id}` : `${API_BASE}/events`;
+      const method = isEdit ? 'PUT' : 'POST';
+
+      try {
+        const res = await fetch(url, { method, headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
+        if (!res.ok) throw new Error(await res.text());
+        toast(isEdit ? 'Evento atualizado!' : 'Evento criado!');
+frontend $ cat ~/tickethub/frontend/public/index.html
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TicketHub</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- NAV -->
+  <nav class="nav">
+    <div class="nav-inner">
+      <a href="#" class="logo">TICKET<span>HUB</span></a>
+      <div class="nav-links">
+        <a href="#" onclick="showPage('home')" class="nav-link active" id="link-home">Eventos</a>
+        <a href="#" onclick="showPage('report')" class="nav-link" id="link-report">Relatório</a>
+        <a href="#" onclick="showPage('admin')" class="nav-link" id="link-admin">Admin</a>
+      </div>
+    </div>
+  </nav>
+
+  <!-- PAGE: HOME -->
+  <main id="page-home" class="page active">
+    <section class="hero">
+      <div class="hero-text">
+        <p class="hero-eyebrow">Os melhores eventos do Brasil</p>
+        <h1 class="hero-title">Sua próxima<br><em>experiência</em><br>começa aqui.</h1>
+      </div>
+      <div class="hero-decoration"></div>
+    </section>
+
+    <section class="events-section">
+      <div class="section-header">
+        <h2>Eventos disponíveis</h2>
+        <div class="filter-bar">
+          <select id="filter-category" onchange="filterEvents()">
+            <option value="">Todas as categorias</option>
+            <option value="show">Show</option>
+            <option value="sports">Esporte</option>
+            <option value="festival">Festival</option>
+            <option value="theater">Teatro</option>
+            <option value="other">Outro</option>
+          </select>
+          <select id="filter-city" onchange="filterEvents()">
+            <option value="">Todas as cidades</option>
+          </select>
+        </div>
+      </div>
+
+      <div id="events-grid" class="events-grid">
+        <div class="loading-state">Carregando eventos...</div>
+      </div>
+    </section>
+  </main>
+
+  <!-- PAGE: REPORT -->
+  <main id="page-report" class="page">
+    <section class="section-padded">
+      <div class="section-header">
+        <h2>Relatório Geral <span class="badge-lambda">via Lambda /report</span></h2>
+        <button class="btn-primary" onclick="loadReport()">Atualizar</button>
+      </div>
+      <div id="report-content">
+        <div class="loading-state">Clique em "Atualizar" para gerar o relatório.</div>
+      </div>
+    </section>
+  </main>
+
+  <!-- PAGE: ADMIN -->
+  <main id="page-admin" class="page">
+    <section class="section-padded">
+      <div class="section-header">
+        <h2>Gerenciar Eventos</h2>
+        <button class="btn-primary" onclick="openModal()">+ Novo Evento</button>
+      </div>
+      <div id="admin-table-wrapper">
+        <div class="loading-state">Carregando...</div>
+      </div>
+    </section>
+  </main>
+
+  <!-- MODAL CREATE/EDIT -->
+  <div id="modal-overlay" class="modal-overlay hidden" onclick="closeModal(event)">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 id="modal-title">Novo Evento</h3>
+        <button class="modal-close" onclick="closeModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="form-id" />
+        <div class="form-row">
+          <div class="form-group">
+            <label>Nome do Evento *</label>
+            <input type="text" id="form-name" placeholder="Ex: Show da Madonna" />
+          </div>
+          <div class="form-group">
+            <label>Categoria *</label>
+            <select id="form-category">
+              <option value="show">Show</option>
+              <option value="sports">Esporte</option>
+              <option value="festival">Festival</option>
+              <option value="theater">Teatro</option>
+              <option value="other">Outro</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Descrição</label>
+          <textarea id="form-description" rows="2" placeholder="Descrição do evento"></textarea>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Local (Venue) *</label>
+            <input type="text" id="form-venue" placeholder="Ex: Allianz Parque" />
+          </div>
+          <div class="form-group">
+            <label>Cidade *</label>
+            <input type="text" id="form-city" placeholder="Ex: São Paulo" />
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Data e Hora *</label>
+            <input type="datetime-local" id="form-date" />
+          </div>
+          <div class="form-group">
+            <label>Total de Ingressos *</label>
+            <input type="number" id="form-tickets" placeholder="Ex: 10000" min="1" />
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Preço (R$) *</label>
+          <input type="number" id="form-price" placeholder="Ex: 250.00" min="0" step="0.01" />
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-ghost" onclick="closeModal()">Cancelar</button>
+        <button class="btn-primary" onclick="saveEvent()">Salvar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TOAST -->
+  <div id="toast" class="toast hidden"></div>
+
+  <script>
+    // ──────────────────────────────────────────────
+    // CONFIG — troca pela URL do seu API Gateway
+    // ──────────────────────────────────────────────
+    const API_BASE = 'https://xajfi87ghj.execute-api.us-east-1.amazonaws.com/prod';
 
     // ── Navegação ──────────────────────────────────
     function showPage(name) {
