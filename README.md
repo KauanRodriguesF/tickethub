@@ -146,13 +146,13 @@ A função em `infra/lambda/handler.mjs` consome o endpoint `/events` via API Ga
 ## 7. Checklist de Entrega
 
 - [x] API CRUD cobre 4 operações (GET, POST, PUT, DELETE)
-- [ ] Banco RDS criado em subnet privada; porta 3306 não exposta
+- [x] Banco RDS criado em subnet privada; porta 3306 não exposta
 - [x] Imagem Docker (backend e frontend com Dockerfile)
-- [ ] API Gateway roteando /events* → ECS e /report → Lambda
+- [x] API Gateway roteando /events* → ECS e /report → Lambda
 - [x] Lambda consome a API via HTTP, gera JSON de relatório (não acessa RDS)
 - [x] docker-compose.yml para rodar localmente
 - [x] schema.sql com criação da tabela e dados de exemplo
-- [ ] README completo + diagrama PNG em docs/
-- [ ] PDF ≤ 12 páginas com capturas de tela
-- [ ] Vídeo ≤ 5 min demonstrando CRUD e /report
-- [ ] ZIP final com código + PDF + link do vídeo
+- [x] README completo + diagrama PNG em docs/
+- [x] PDF ≤ 12 páginas com capturas de tela
+- [x] Vídeo ≤ 5 min demonstrando CRUD e /report
+- [x] ZIP final com código + PDF + link do vídeo
